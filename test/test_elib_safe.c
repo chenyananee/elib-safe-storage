@@ -68,7 +68,7 @@ static void test_init_valid(void) {
                                           sizeof(test_data_t), TEST_MAGIC, test_validate);
 
     assert(err == ELIB_SAFE_OK);
-    assert(ctx.initialized == 1);
+    assert(ctx.bit_flags.initialized == 1);
     assert(ctx.primary_addr == 0);
     assert(ctx.backup_addr == 64);
     assert(ctx.data_size == sizeof(test_data_t));
@@ -364,11 +364,11 @@ static void test_deinit(void) {
     elib_safe_ctx_t ctx;
     elib_safe_init(&ctx, &mock_backend, 0, 64, sizeof(test_data_t), TEST_MAGIC, test_validate);
 
-    assert(ctx.initialized == 1);
+    assert(ctx.bit_flags.initialized == 1);
 
     elib_safe_deinit(&ctx);
 
-    assert(ctx.initialized == 0);
+    assert(ctx.bit_flags.initialized == 0);
 
     test_data_t data = {0};
     elib_safe_err_t err = elib_safe_write(&ctx, &data);

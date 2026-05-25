@@ -36,7 +36,7 @@ elib_safe_err_t elib_safe_init(
     ctx->data_size = data_size;
     ctx->magic = magic;
     ctx->validate = validate;
-    ctx->initialized = 1;
+    ctx->bit_flags.initialized = 1;
 
     return ELIB_SAFE_OK;
 }
@@ -45,7 +45,7 @@ elib_safe_err_t elib_safe_write(elib_safe_ctx_t *ctx, const void *data) {
     if (ctx == NULL || data == NULL) {
         return ELIB_SAFE_ERR_INVALID_PARAM;
     }
-    if (!ctx->initialized) {
+    if (!ctx->bit_flags.initialized) {
         return ELIB_SAFE_ERR_NOT_INITIALIZED;
     }
 
@@ -66,7 +66,7 @@ elib_safe_err_t elib_safe_read(elib_safe_ctx_t *ctx, void *out) {
     if (ctx == NULL || out == NULL) {
         return ELIB_SAFE_ERR_INVALID_PARAM;
     }
-    if (!ctx->initialized) {
+    if (!ctx->bit_flags.initialized) {
         return ELIB_SAFE_ERR_NOT_INITIALIZED;
     }
 
@@ -96,7 +96,7 @@ elib_safe_err_t elib_safe_recover(elib_safe_ctx_t *ctx) {
     if (ctx == NULL) {
         return ELIB_SAFE_ERR_INVALID_PARAM;
     }
-    if (!ctx->initialized) {
+    if (!ctx->bit_flags.initialized) {
         return ELIB_SAFE_ERR_NOT_INITIALIZED;
     }
 
@@ -123,5 +123,5 @@ void elib_safe_deinit(elib_safe_ctx_t *ctx) {
     if (ctx == NULL) {
         return;
     }
-    ctx->initialized = 0;
+    ctx->bit_flags.initialized = 0;
 }

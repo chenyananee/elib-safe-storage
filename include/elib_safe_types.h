@@ -27,7 +27,9 @@ typedef struct {
     uint32_t data_size;
     uint16_t magic;
     elib_safe_validate_fn validate;
-    int initialized;
+    struct {
+        uint8_t initialized : 1;
+    } bit_flags;
 } elib_safe_ctx_t;
 
 #ifdef __cplusplus
