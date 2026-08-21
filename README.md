@@ -39,6 +39,55 @@ bool my_config_validate(const void *data, size_t len) {
 
 ### 3. 创建后端接口
 
+#### 方式一：直接使用 elib-nvs-wear-leveling（推荐）
+
+如果已使用 elib-nvs-wear-leveling 库，可直接将其作为后端：
+
+```c
+#include "elib_nvs.h"
+#include "elib_safe.h"
+
+static elib_nvs_ctx_t g_nvs_ctx;
+
+/* 后端读取函数 */
+static int nvs_read(uint32_t addr, void *buf, size_t len) {
+    return elib_nvs_read(&g_nvs_ctx, addr, buf, len);
+}
+
+/* 后端写入函数 */
+static int nvs_write(uint32_t addr, const void *buf, size_t len) {
+    return elib_nvs_write(&g_nvs_ctx, addr, buf, len);
+}
+
+static elib_safe_backend_t my_backend = {
+    .read = nvs_read,
+    .write = nvs_write,
+};
+
+/* 初始化 NVS wear-leveling */
+void storage_init(void) {
+    static elib_nvs_hal_driver_t nvs_driver = {
+        .user_data = &my_flash_hw,
+        .read = my_flash_read,
+        .write = my_flash_write,
+        .erase = my_flash_erase,
+    };
+
+    elib_nvs_init(
+        &g_nvs_ctx,
+        &nvs_driver,
+        0x08000000,      /* Flash 起始地址 */
+        12 * 1024,        /* 12KB 总空间 */
+        4 * 1024,         /* 4KB 扇区大小 */
+        64                /* 数据单元大小（>= sizeof(my_config_t)） */
+    );
+}
+```
+
+#### 方式二：直接 Flash 访问
+
+直接实现读写函数：
+
 ```c
 static int flash_read(uint32_t addr, void *buf, size_t len) {
     // 你的 flash 读取实现
@@ -62,9 +111,12 @@ static elib_safe_backend_t my_backend = {
 static elib_safe_ctx_t safe_ctx;
 
 void app_init(void) {
+    /* 初始化 NVS wear-leveling 后端（如果使用方式一） */
+    storage_init();
+
     elib_safe_init(&safe_ctx, &my_backend,
-                   0x0000,              /* 主区地址 */
-                   0x0100,              /* 备区地址 */
+                   0x0000,              /* 主区地址（NVS 逻辑地址） */
+                   0x0100,              /* 备区地址（NVS 逻辑地址） */
                    sizeof(my_config_t), /* 数据大小 */
                    MY_CONFIG_MAGIC,     /* 魔数值 */
                    my_config_validate); /* 校验回调 */
@@ -78,6 +130,91 @@ void save_config(my_config_t *cfg) {
 
 void load_config(my_config_t *cfg) {
     elib_safe_read(&safe_ctx, cfg);
+}
+```
+
+## 完整示例：结合 elib-nvs-wear-leveling
+
+```c
+#include "elib_nvs.h"
+#include "elib_safe.h"
+
+/* 数据结构 */
+typedef struct {
+    uint16_t magic;
+    uint16_t crc16;
+    uint32_t config_val;
+    uint8_t  reserved[56];
+} my_config_t;
+
+#define MY_CONFIG_MAGIC  0xA5A5
+
+/* 校验回调 */
+bool my_config_validate(const void *data, size_t len) {
+    const my_config_t *cfg = (const my_config_t *)data;
+    if (cfg->magic != MY_CONFIG_MAGIC) return false;
+    return calculate_crc16(data, len) == cfg->crc16;
+}
+
+/* NVS 后端 */
+static elib_nvs_ctx_t g_nvs_ctx;
+
+static int nvs_read(uint32_t addr, void *buf, size_t len) {
+    return elib_nvs_read(&g_nvs_ctx, addr, buf, len);
+}
+
+static int nvs_write(uint32_t addr, const void *buf, size_t len) {
+    return elib_nvs_write(&g_nvs_ctx, addr, buf, len);
+}
+
+static elib_safe_backend_t g_backend = {
+    .read = nvs_read,
+    .write = nvs_write,
+};
+
+/* 安全存储上下文 */
+static elib_safe_ctx_t g_safe_ctx;
+
+/* 初始化 */
+void app_init(void) {
+    /* 1. 初始化 NVS wear-leveling */
+    static elib_nvs_hal_driver_t nvs_driver = {
+        .user_data = &my_flash_hw,
+        .read = my_flash_read,
+        .write = my_flash_write,
+        .erase = my_flash_erase,
+    };
+
+    elib_nvs_init(
+        &g_nvs_ctx,
+        &nvs_driver,
+        0x08000000,      /* Flash 起始地址 */
+        12 * 1024,        /* 12KB 总空间 */
+        4 * 1024,         /* 4KB 扇区 */
+        64                /* 数据单元大小（>= sizeof(my_config_t)） */
+    );
+
+    /* 2. 初始化安全存储 */
+    elib_safe_init(
+        &g_safe_ctx,
+        &g_backend,
+        0x0000,              /* 主区逻辑地址 */
+        0x0100,              /* 备区逻辑地址 */
+        sizeof(my_config_t),
+        MY_CONFIG_MAGIC,
+        my_config_validate
+    );
+}
+
+/* 使用示例 */
+void save_config(my_config_t *cfg) {
+    cfg->magic = MY_CONFIG_MAGIC;
+    cfg->crc16 = calculate_crc16(cfg, sizeof(my_config_t));
+    elib_safe_write(&g_safe_ctx, cfg);
+}
+
+void load_config(my_config_t *cfg) {
+    elib_safe_read(&g_safe_ctx, cfg);
 }
 ```
 
@@ -133,18 +270,16 @@ void elib_safe_deinit(elib_safe_ctx_t *ctx);
 
 ## 错误码
 
-| 错误码 | 描述 |
-|--------|------|
-| `ELIB_SAFE_OK` | 成功 |
-| `ELIB_SAFE_ERR_INVALID_PARAM` | 无效参数 |
-| `ELIB_SAFE_ERR_NOT_INITIALIZED` | 未初始化 |
-| `ELIB_SAFE_ERR_WRITE_FAILED` | 写入失败 |
-| `ELIB_SAFE_ERR_READ_FAILED` | 读取失败 |
-| `ELIB_SAFE_ERR_CORRUPTED` | 主区和备区均损坏 |
+| 错误码                             | 描述       |
+| ------------------------------- | -------- |
+| `ELIB_SAFE_OK`                  | 成功       |
+| `ELIB_SAFE_ERR_INVALID_PARAM`   | 无效参数     |
+| `ELIB_SAFE_ERR_NOT_INITIALIZED` | 未初始化     |
+| `ELIB_SAFE_ERR_WRITE_FAILED`    | 写入失败     |
+| `ELIB_SAFE_ERR_READ_FAILED`     | 读取失败     |
+| `ELIB_SAFE_ERR_CORRUPTED`       | 主区和备区均损坏 |
 
-## 与 NVS Wear-Leveling 集成
-
-详细的 NVS 集成指南请参考 `docs/superpowers/specs/2026-04-13-safe-storage-design.md`。
+# 
 
 ## 许可证
 
