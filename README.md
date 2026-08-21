@@ -14,12 +14,12 @@
 
 ### 1. 定义数据结构
 
-用户需要在数据结构中包含校验字段：
+用户可自由定义数据结构，建议包含校验字段以便 `validate` 回调判断数据有效性：
 
 ```c
 typedef struct {
-    uint16_t magic;      /* 魔数用于校验 */
-    uint16_t crc16;      /* CRC 校验值 */
+    uint16_t magic;      /* 示例：魔数 */
+    uint16_t crc16;      /* 示例：CRC 校验值 */
     uint32_t config_val;
     uint8_t  reserved[56];
 } my_config_t;
