@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "elib_safe_err.h"
 
 #ifdef __cplusplus
