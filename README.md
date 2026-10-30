@@ -1,3 +1,5 @@
+**简体中文** | [English](README.en.md)
+
 # elib-safe-storage
 
 轻量级嵌入式**断电容错双区存储库**：每条记录先写主区、再写备区，任何一半撕裂，
